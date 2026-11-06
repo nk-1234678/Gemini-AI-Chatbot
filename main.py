@@ -35,12 +35,27 @@ while True:
         print("Chat Ended.Feel free to reach out if you need anything else. Have a great day! ")
         break
     
-    response = client.models.generate_content(
-        model = "gemini-3.5-flash",
-        contents=question
-    )
+    if not question:
+        print("Please ask a question.")
+        continue
     
-    print("\nGemini:", response.text,"\n")
+    try:
+        response = client.models.generate_content(
+                model = "gemini-3.5-flash",
+                contents=question
+            )
+        
+        if response.text:
+            print("\nGemini:", response.text,"\n")
+            
+    
+    except Exception as e:
+        print("Something went wrong")
+        print("Please try again")
+    
+
+    
+    
 
 
 
