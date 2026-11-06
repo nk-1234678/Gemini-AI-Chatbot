@@ -18,18 +18,30 @@ if not api_key:
 # Initialising Gemini Client
 client = genai.Client(api_key=api_key)    
 
-question = input("You:")
+# question = input("You:")
 
-# Generate AI Response
-response = client.models.generate_content(      
-    model = "gemini-3.5-flash",
-    contents=question
-)
+# # Generate AI Response
+# response = client.models.generate_content(      
+#     model = "gemini-3.5-flash",
+#     contents=question
+# )
 
 
+
+while True:
+    question = input("You: ")
     
+    if question.lower() == "exit":
+        print("Chat Ended.Feel free to reach out if you need anything else. Have a great day! ")
+        break
     
+    response = client.models.generate_content(
+        model = "gemini-3.5-flash",
+        contents=question
+    )
+    
+    print("\nGemini:", response.text,"\n")
 
-print("\nGemini:", response.text,"\n")
+
 
 
