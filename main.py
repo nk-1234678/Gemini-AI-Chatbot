@@ -16,13 +16,57 @@ if not api_key:
 # Initialize Gemini client
 client = genai.Client(api_key=api_key)
 
-# Store conversation history
+# Model configuration
+MODEL_NAME = "gemini-3.5-flash"
+MAX_INPUT_TOKENS = 1000
+
+# Store complete conversation history
 conversation_history = []
 
 
-MAX_HISTORY_TURNS = 5
+def build_context_within_budget(history, new_user_message):
+    """
+    Build a temporary context that fits within
+    the maximum input token budget.
+    """
+
+    # Create a separate context.
+    # Original conversation_history remains unchanged.
+    context = history.copy() + [new_user_message]
+
+    while True:
+
+        # Count tokens in the current context
+        token_info = client.models.count_tokens(
+            model=MODEL_NAME,
+            contents=context
+        )
+
+        total_tokens = token_info.total_tokens
+
+        print(f"Input tokens: {total_tokens}")
+
+        # Check whether context fits within token budget
+        if total_tokens <= MAX_INPUT_TOKENS:
+            return context
+
+        # If only the current question remains
+        if len(context) <= 1:
+            raise ValueError(
+                "Your question exceeds the token budget!"
+            )
+
+        # Remove the oldest user-model message pair
+        del context[:2]
+
+
+print("Gemini Chatbot V6 started!")
+print("Type 'exit' to end the chat.")
+print("Type 'clear' to clear conversation history.\n")
+
 
 while True:
+
     question = input("You: ").strip()
 
     if question.lower() == "exit":
@@ -44,39 +88,38 @@ while True:
         parts=[types.Part(text=question)]
     )
 
-    
-# Keep the last 5 completed conversation turns
-recent_history = conversation_history[-(MAX_HISTORY_TURNS * 2):]
+    try:
 
-# Add the current user message temporarily
-pending_history = recent_history + [user_message]
-
-try:
-    response = client.models.generate_content(
-        model="gemini-3.5-flash",
-        contents=pending_history
-    )
-
-    if response.text:
-        print("\nGemini:", response.text, "\n")
-
-        # Save the successful conversation turn
-        conversation_history.append(user_message)
-
-        conversation_history.append(
-            types.Content(
-                role="model",
-                parts=[types.Part(text=response.text)]
-            )
+        # Build context according to token budget
+        pending_history = build_context_within_budget(
+            conversation_history,
+            user_message
         )
 
-        # Remove older complete conversation turns
-        if len(conversation_history) > MAX_HISTORY_TURNS * 2:
-            del conversation_history[:2]
+        # Send context to Gemini
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=pending_history
+        )
 
-    else:
-        print("Gemini returned an empty response.\n")
+        if response.text:
 
-except Exception as e:
-    print(f"Something went wrong: {e}")
-    print("Please try again.\n")
+            print("\nGemini:", response.text, "\n")
+
+            # Save successful conversation to full history
+            conversation_history.append(user_message)
+
+            conversation_history.append(
+                types.Content(
+                    role="model",
+                    parts=[types.Part(text=response.text)]
+                )
+            )
+
+        else:
+            print("Gemini returned an empty response.\n")
+
+    except Exception as e:
+
+        print(f"Something went wrong: {e}")
+        print("Please try again.\n")
