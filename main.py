@@ -1,4 +1,4 @@
-
+import json
 import os
 from dotenv import load_dotenv
 from google import genai
@@ -19,7 +19,9 @@ client = genai.Client(api_key=api_key)
 # Model configuration
 MODEL_NAME = "gemini-3.5-flash"
 MAX_INPUT_TOKENS = 1000
-SUMMARY_THRESHOLD = 10
+SUMMARY_THRESHOLD = 6
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MEMORY_FILE = os.path.join(BASE_DIR, "conversation_memory.json")
 conversation_summary = ""
 
 # Store complete conversation history
@@ -27,6 +29,80 @@ conversation_history = []
 
 
 
+
+
+
+
+def load_conversation_memory():
+    global conversation_history, conversation_summary
+
+    if not os.path.exists(MEMORY_FILE):
+        print("No previous memory found. Starting a new conversation.\n")
+        return
+
+    try:
+        with open(MEMORY_FILE, "r", encoding="utf-8") as file:
+            saved_data = json.load(file)
+
+        conversation_summary = saved_data.get("conversation_summary", "")
+
+        conversation_history = []
+
+        for message in saved_data.get("conversation_history", []):
+            restored_message = types.Content(
+                role=message["role"],
+                parts=[
+                    types.Part(text=part["text"])
+                    for part in message["parts"]
+                ]
+            )
+
+            conversation_history.append(restored_message)
+
+        print("Previous conversation memory loaded successfully!\n")
+
+    except (json.JSONDecodeError, KeyError, TypeError, OSError) as e:
+        print(f"Could not load previous memory: {e}")
+        print("Starting with empty memory. Existing file has not been deleted.\n")
+        conversation_history = []
+        conversation_summary = ""
+        
+        
+
+def save_conversation_memory():
+    saved_data = {
+        "conversation_summary": conversation_summary,
+        "conversation_history": []
+    }
+
+    for message in conversation_history:
+        message_data = {
+            "role": message.role,
+            "parts": []
+        }
+
+        for part in message.parts:
+            if part.text:
+                message_data["parts"].append({
+                    "text": part.text
+                })
+
+        saved_data["conversation_history"].append(message_data)
+
+    temp_file = MEMORY_FILE + ".tmp"
+
+    try:
+        with open(temp_file, "w", encoding="utf-8") as file:
+            json.dump(saved_data, file, indent=4, ensure_ascii=False)
+
+        os.replace(temp_file, MEMORY_FILE)
+        print("[Memory saved successfully]")
+
+    except (OSError, TypeError, ValueError) as e:
+        print(f"Could not save conversation memory: {e}")
+        
+        
+        
 
 def summarize_conversation(history, existing_summary):
     """
@@ -165,7 +241,9 @@ def build_context_within_budget(history, new_user_message):
 
 
 
-print("Gemini Chatbot V7 started!")
+load_conversation_memory()
+
+print("Gemini Chatbot V8 started!")
 print("Type 'exit' to end the chat.")
 print("Type 'clear' to clear conversation history.\n")
 
@@ -180,6 +258,9 @@ while True:
     if question.lower() == "clear":
         conversation_history.clear()
         conversation_summary = ""
+
+        save_conversation_memory()
+
         print("Conversation history and summary cleared.\n")
         continue
 
@@ -196,6 +277,7 @@ while True:
 
         # Step 1: Summarize older messages if threshold is reached
         update_conversation_memory()
+        save_conversation_memory()
 
         # Step 2: Build context within token budget
         pending_history = build_context_within_budget(
@@ -210,10 +292,8 @@ while True:
         )
 
         if response.text:
-
             print("\nGemini:", response.text, "\n")
 
-            # Step 4: Save successful conversation turn
             conversation_history.append(user_message)
 
             conversation_history.append(
@@ -222,6 +302,7 @@ while True:
                     parts=[types.Part(text=response.text)]
                 )
             )
+            save_conversation_memory()
 
         else:
             print("Gemini returned an empty response.\n")
