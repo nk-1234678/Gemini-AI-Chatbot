@@ -24,6 +24,23 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MEMORY_FILE = os.path.join(BASE_DIR, "conversation_memory.json")
 conversation_summary = ""
 
+
+SYSTEM_INSTRUCTION = """
+You are a helpful AI chatbot.
+
+1. Answer user questions clearly and accurately.
+2. Use simple language whenever possible.
+3. Adapt your response language to the user's preference.
+4. Include practical examples when they help explain a concept.
+5. Avoid unnecessarily lengthy explanations.
+6. Break complex topics into smaller steps when needed.
+7. Follow applicable safety guidelines.
+"""
+
+config = types.GenerateContentConfig(
+    system_instruction=SYSTEM_INSTRUCTION
+)
+
 # Store complete conversation history
 conversation_history = []
 
@@ -104,13 +121,13 @@ def save_conversation_memory():
         
         
 
+
 def summarize_conversation(history, existing_summary):
     """
     Summarize older conversation messages
     while preserving important information.
     """
 
-    # Convert conversation messages into readable text
     conversation_text = ""
 
     for message in history:
@@ -120,8 +137,6 @@ def summarize_conversation(history, existing_summary):
             if part.text:
                 conversation_text += f"{role}: {part.text}\n"
 
-    # Include previous summary so important information
-    # is not lost during summary updates
     prompt = f"""
 You are a conversation summarization assistant.
 
@@ -243,7 +258,7 @@ def build_context_within_budget(history, new_user_message):
 
 load_conversation_memory()
 
-print("Gemini Chatbot V8 started!")
+print("Gemini Chatbot V10 started!")
 print("Type 'exit' to end the chat.")
 print("Type 'clear' to clear conversation history.\n")
 
@@ -285,27 +300,45 @@ while True:
             user_message
         )
 
-        # Step 3: Send context to Gemini
-        response = client.models.generate_content(
+        
+        # Step 3: Send context to Gemini using streaming
+        response_stream = client.models.generate_content_stream(
             model=MODEL_NAME,
-            contents=pending_history
+            contents=pending_history,
+            config=config
         )
 
-        if response.text:
-            print("\nGemini:", response.text, "\n")
+        # Store the complete response
+        response_text = ""
+
+        print("\nGemini: ", end="", flush=True)
+
+        # Receive and display response chunks
+        for chunk in response_stream:
+
+            if chunk.text:
+                print(chunk.text, end="", flush=True)
+                response_text += chunk.text
+
+        print("\n")
+
+        # Step 4: Save complete conversation after streaming finishes
+        if response_text:
 
             conversation_history.append(user_message)
 
             conversation_history.append(
                 types.Content(
                     role="model",
-                    parts=[types.Part(text=response.text)]
+                    parts=[types.Part(text=response_text)]
                 )
             )
+
             save_conversation_memory()
 
         else:
             print("Gemini returned an empty response.\n")
+
 
     except Exception as e:
 
